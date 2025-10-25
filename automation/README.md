@@ -244,6 +244,12 @@ The BCM role monitor is designed to work seamlessly with BCM's imaging workflow:
 3. **Capture BCM images** using `cmsh -c 'device;use <node>;grabimage -w'`
 4. **Deploy images** to additional nodes of the same type
 
+**What `grabimage -w` does:**
+- Copies the node as a BCM software image
+- Overwrites the software image currently assigned to that node (so, make sure to clone first if you don't want to overwrite the old image)
+- Includes all installed packages, services, and configurations
+- `-w` flag means "write." without it the command will run as dry-run only.
+
 The service automatically discovers its own hostname and BCM headnodes, making it fully compatible with BCM imaging processes.
 
 ## Additional Automation Tools

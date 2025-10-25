@@ -927,6 +927,12 @@ for each node type to enable deployment to all nodes of the same type.
 
 Execute the following commands to capture images for each node type:
 
+**What `grabimage -w` does:**
+- Copies the node as a BCM software image
+- Overwrites the software image currently assigned to that node (so, make sure to clone first if you don't want to overwrite the old image)
+- Includes all installed packages, services, and configurations
+- `-w` flag means "write." without it the command will run as dry-run only.
+
 **Slurm Controller (slurmctl):**
 
 ```bash
