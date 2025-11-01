@@ -101,6 +101,57 @@ python3 fix_jobstats_alloc_cores.py
 - Built-in testing functionality
 - Automatic backup creation with rollback capability
 
+### fix_jobstats_mig_utilization.py
+
+**Purpose**: Fix for jobstats GPU utilization queries to support both regular GPUs and MIG (Multi-Instance GPU) instances.
+
+**Problem**: 
+- Regular GPUs expose `nvidia_gpu_duty_cycle` metric for utilization
+- MIG instances do NOT expose `duty_cycle` (nvidia-smi reports N/A)
+- MIG instances expose `nvidia_gpu_sm_util_percent` instead
+- Original jobstats only queries `duty_cycle`, causing empty results for MIG jobs
+
+**Solution**: 
+- Adds fallback logic to try `duty_cycle` first (regular GPUs)
+- Falls back to `sm_util_percent` if no data returned (MIG GPUs)
+- Maintains backward compatibility with non-MIG nodes
+
+**Use Case**:
+- Fix "Value is unknown" errors for GPU utilization on MIG nodes
+- Enable GPU utilization reporting for both MIG and non-MIG jobs
+- Support hybrid clusters with both regular GPUs and MIG instances
+
+**Usage**:
+```bash
+# Run the fix (must be run on login node where jobstats is installed)
+python3 fix_jobstats_mig_utilization.py
+
+# The script will:
+# - Create a backup of the original file
+# - Add a new method with fallback logic for GPU utilization
+# - Replace the single metric query with smart fallback
+# - Test the fix with a recent job
+# - Restore from backup if something goes wrong
+```
+
+**Features**:
+- Automatic metric fallback (duty_cycle → sm_util_percent)
+- Maintains compatibility with regular GPU nodes
+- Automatic backup creation with rollback
+- Built-in testing to verify fix works
+- Debug logging to show which metric was used
+
+**Technical Details**:
+- Adds `get_gpu_utilization_with_fallback()` method to jobstats.py
+- Tries `nvidia_gpu_duty_cycle` first (backward compatible)
+- If empty, tries `nvidia_gpu_sm_util_percent` (MIG support)
+- Works for both MIG-enabled B200 nodes and regular H100/A100 nodes
+
+**Alternative Approach**:
+- See [alternate_mig_fix.md](alternate_mig_fix.md) for Prometheus-based solution
+- No code changes required - uses Prometheus recording rules
+- Both approaches can coexist
+
 ## Workload Testing
 
 ### GPU Test with GPU Burn (not in this repo)

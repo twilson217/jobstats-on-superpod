@@ -1,5 +1,10 @@
-# Princeton jobstats repository (cloned for reference)
+# Reference repositories (cloned for development/reference only)
 .jobstats/
+jobstats/
+nvidia_gpu_prometheus_exporter/
+
+# Temporary/sync directories
+.nosync/
 
 # Python cache files
 __pycache__/

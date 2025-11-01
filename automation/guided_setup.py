@@ -922,8 +922,8 @@ rm /tmp/nvidia_gpu_exporter.service''',
             },
             {
                 'host': slurm_controller,
-                'command': 'cp /opt/jobstats-deployment/jobstats/slurm/prolog.d/gpustats_helper.sh /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh',
-                'description': 'Copy prolog script to shared storage'
+                'command': 'cp /opt/jobstats-deployment/automation/scripts/prolog-jobstats.sh /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh',
+                'description': 'Copy MIG-optimized prolog script to shared storage'
             },
             {
                 'host': slurm_controller,
@@ -932,8 +932,8 @@ rm /tmp/nvidia_gpu_exporter.service''',
             },
             {
                 'host': slurm_controller,
-                'command': 'cp /opt/jobstats-deployment/jobstats/slurm/epilog.d/gpustats_helper.sh /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh',
-                'description': 'Copy epilog script to shared storage'
+                'command': 'cp /opt/jobstats-deployment/automation/scripts/epilog-jobstats.sh /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh',
+                'description': 'Copy MIG-optimized epilog script to shared storage'
             },
             {
                 'host': slurm_controller,

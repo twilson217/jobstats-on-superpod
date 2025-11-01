@@ -252,6 +252,40 @@ The BCM role monitor is designed to work seamlessly with BCM's imaging workflow:
 
 The service automatically discovers its own hostname and BCM headnodes, making it fully compatible with BCM imaging processes.
 
+## MIG (Multi-Instance GPU) Support
+
+This deployment includes comprehensive support for NVIDIA Multi-Instance GPU (MIG) technology, which allows partitioning of GPUs into multiple instances (particularly important for B200 and newer architectures).
+
+### Key MIG Features
+
+**Automated MIG-Aware Scripts:**
+- Prolog/epilog scripts automatically detect and handle MIG UUIDs
+- No manual configuration needed for MIG vs non-MIG nodes
+- Works transparently with both GPU types in the same cluster
+
+**GPU Utilization Metrics:**
+- Automatic fallback between `nvidia_gpu_duty_cycle` (regular GPUs) and `nvidia_gpu_sm_util_percent` (MIG instances)
+- Fix script available: `automation/tools/fix_jobstats_mig_utilization.py`
+
+**Comprehensive Documentation:**
+- Full MIG support guide: [MIG_SUPPORT.md](MIG_SUPPORT.md)
+- Troubleshooting for MIG-specific issues
+- Architecture-specific behavior documentation
+
+### Quick MIG Deployment
+
+The guided setup automatically deploys MIG-compatible scripts. For existing installations:
+
+```bash
+# Apply GPU utilization fix for MIG support
+python3 automation/tools/fix_jobstats_mig_utilization.py
+
+# Verify MIG nodes have updated prolog/epilog scripts
+pdsh -w dgx[001-100] "ls -la /cm/local/apps/slurm/var/prologs/60-prolog-jobstats.sh"
+```
+
+See [MIG_SUPPORT.md](MIG_SUPPORT.md) for complete details, troubleshooting, and verification steps.
+
 ## Additional Automation Tools
 
 For detailed information about additional automation tools including validation scripts, deployment utilities, and testing frameworks, see [automation/tools/README.md](tools/README.md).

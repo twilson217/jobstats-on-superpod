@@ -6,10 +6,12 @@ This repository contains resources for deploying Princeton University's jobstats
 
 Jobstats is a comprehensive job monitoring platform designed for CPU and GPU clusters using Slurm. It provides:
 - Real-time job utilization metrics
-- GPU and CPU performance monitoring
+- GPU and CPU performance monitoring (including MIG support)
 - Automated efficiency reports
 - Web-based dashboards via Grafana
 - Command-line tools for job analysis
+
+**MIG Support**: This deployment includes full support for NVIDIA Multi-Instance GPU (MIG) technology. See [MIG Support Documentation](automation/MIG_SUPPORT.md) for details.
 
 ## Quickstart
 
