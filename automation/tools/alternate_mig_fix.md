@@ -4,7 +4,9 @@ This document describes how to fix MIG GPU utilization support entirely in Prome
 
 ## Overview
 
-Instead of modifying `jobstats.py` to add fallback logic, you can configure Prometheus to create a `nvidia_gpu_duty_cycle` metric for MIG instances using their existing `nvidia_gpu_sm_util_percent` metric.
+Instead of modifying `jobstats.py` to add fallback logic, you can configure Prometheus to create a `nvidia_gpu_duty_cycle` metric for MIG instances using their existing `nvidia_gpu_graphics_util_percent` metric (scaled by 100).
+
+**Important:** The `nvidia_gpu_graphics_util_percent` metric from GPM is stored in 0-1 range, so it must be multiplied by 100 to match the 0-100 range of `duty_cycle`.
 
 ## Why Use This Approach?
 
@@ -27,7 +29,7 @@ There are two ways to fix this in Prometheus:
 
 ### Approach 1: Recording Rule (Recommended)
 
-Creates a new `nvidia_gpu_duty_cycle` metric for MIG instances based on `nvidia_gpu_sm_util_percent`.
+Creates a new `nvidia_gpu_duty_cycle` metric for MIG instances based on `nvidia_gpu_graphics_util_percent * 100`.
 
 **Use When:**
 - You want a persistent solution
@@ -36,7 +38,7 @@ Creates a new `nvidia_gpu_duty_cycle` metric for MIG instances based on `nvidia_
 
 ### Approach 2: Metric Relabeling
 
-Renames `nvidia_gpu_sm_util_percent` to `nvidia_gpu_duty_cycle` for MIG instances at scrape time.
+Renames `nvidia_gpu_graphics_util_percent` to `nvidia_gpu_duty_cycle` for MIG instances at scrape time and scales by 100.
 
 **Use When:**
 - You want zero storage overhead
@@ -62,9 +64,10 @@ groups:
   - name: jobstats_mig_compatibility
     interval: 30s
     rules:
-      # Create duty_cycle metric for MIG instances using sm_util_percent
+      # Create duty_cycle metric for MIG instances using graphics_util_percent * 100
+      # Note: GPM metrics are stored in 0-1 range, multiply by 100 to match duty_cycle scale (0-100)
       - record: nvidia_gpu_duty_cycle
-        expr: nvidia_gpu_sm_util_percent{uuid=~"MIG-.*"}
+        expr: nvidia_gpu_graphics_util_percent{uuid=~"MIG-.*"} * 100
         labels:
           source: "mig_compat_rule"
 EOF
@@ -73,7 +76,8 @@ EOF
 **What this does:**
 - Creates a new `nvidia_gpu_duty_cycle` metric
 - Only for devices where `uuid` starts with "MIG-"
-- Uses the value from `nvidia_gpu_sm_util_percent`
+- Uses the value from `nvidia_gpu_graphics_util_percent` multiplied by 100
+- Scaling is necessary because GPM metrics are stored in 0-1 range, not 0-100
 - Preserves all existing labels (jobid, instance, uuid, etc.)
 - Adds a `source` label to identify it came from the rule
 
@@ -168,7 +172,7 @@ curl -s http://localhost:9090/api/v1/rules | jq '.data.groups[] | select(.name==
   "rules": [
     {
       "name": "nvidia_gpu_duty_cycle",
-      "query": "nvidia_gpu_sm_util_percent{uuid=~\"MIG-.*\"}",
+      "query": "nvidia_gpu_graphics_util_percent{uuid=~\"MIG-.*\"} * 100",
       "type": "recording",
       ...
     }
@@ -193,10 +197,12 @@ curl -s 'http://localhost:9090/api/v1/query?query=nvidia_gpu_duty_cycle{uuid=~"M
 ```json
 {
   "uuid": "MIG-1457e955-5461-5ddc-85aa-d5659b8d71f0",
-  "value": "45.2",
+  "value": "99.2",
   "jobid": "167890"
 }
 ```
+
+**Note:** The value will be in 0-100 range (after multiplication) matching `duty_cycle` scale.
 
 ### Step 8: Test with jobstats
 
@@ -239,19 +245,25 @@ scrape_configs:
         target_label: cluster
         replacement: slurm
       
-      # NEW: Rename sm_util_percent to duty_cycle for MIG devices
+      # NEW: Rename graphics_util_percent to duty_cycle for MIG devices
+      # Note: This approach has a limitation - it cannot multiply by 100 at scrape time
+      # For proper scaling, use Recording Rule (Approach 1) instead
       - source_labels: [__name__, uuid]
         separator: ;
-        regex: ^nvidia_gpu_sm_util_percent;(MIG-.+)
+        regex: ^nvidia_gpu_graphics_util_percent;(MIG-.+)
         target_label: __name__
         replacement: nvidia_gpu_duty_cycle
         action: replace
 ```
 
-**What this does:**
-- At scrape time, checks if metric is `nvidia_gpu_sm_util_percent` AND `uuid` starts with "MIG-"
-- If both conditions match, renames the metric to `nvidia_gpu_duty_cycle`
-- Original metric name is replaced (not duplicated)
+**⚠️ Important Limitation:**
+
+Metric relabeling **cannot perform arithmetic operations** like multiplying by 100. This means:
+- The metric will be renamed to `nvidia_gpu_duty_cycle`
+- But values will still be in 0-1 range (e.g., 0.99 instead of 99)
+- Jobstats will display 1% instead of 99%
+
+**For this reason, Approach 1 (Recording Rule) is strongly recommended**, as it can both rename AND scale the metric properly.
 
 ### Step 2: Validate and Reload
 
@@ -271,10 +283,12 @@ Wait 1-2 scrape intervals, then query:
 # Should now see duty_cycle for MIG devices
 curl -s 'http://localhost:9090/api/v1/query?query=nvidia_gpu_duty_cycle{uuid=~"MIG-.*"}' | jq '.data.result[0]'
 
-# Should NOT see sm_util_percent for MIG devices anymore
-curl -s 'http://localhost:9090/api/v1/query?query=nvidia_gpu_sm_util_percent{uuid=~"MIG-.*"}' | jq '.data.result'
+# Should NOT see graphics_util_percent for MIG devices anymore
+curl -s 'http://localhost:9090/api/v1/query?query=nvidia_gpu_graphics_util_percent{uuid=~"MIG-.*"}' | jq '.data.result'
 # (should be empty or show only non-MIG devices)
 ```
+
+**Note:** Due to the scaling limitation mentioned above, this approach is **not recommended**. Use Approach 1 (Recording Rule) instead.
 
 ## Comparison: Recording Rule vs Metric Relabeling
 
@@ -283,9 +297,11 @@ curl -s 'http://localhost:9090/api/v1/query?query=nvidia_gpu_sm_util_percent{uui
 | **Storage Impact** | Creates new time series (+storage) | No additional storage |
 | **Original Metric** | Preserved (both exist) | Replaced (only new name exists) |
 | **Evaluation Timing** | After scrape (rule evaluation) | During scrape (immediate) |
-| **Flexibility** | Can add logic/transformations | Limited to relabeling |
+| **Flexibility** | Can add logic/transformations | Limited to relabeling only |
+| **Arithmetic Operations** | ✅ Yes (can multiply by 100) | ❌ No (cannot scale values) |
 | **Visibility** | Easy to debug (shows in rules) | Harder to debug (transparent) |
-| **Best For** | Complex transformations, keeping both | Simple renames, reducing storage |
+| **Best For** | Complex transformations, keeping both | Simple renames without math |
+| **MIG Fix Recommendation** | ✅ **Recommended** (includes * 100) | ❌ Not recommended (missing scale) |
 
 ## Troubleshooting
 
@@ -318,8 +334,8 @@ curl -s http://localhost:9090/api/v1/rules | jq '.data.groups[] | select(.name==
 ```
 
 **Common causes:**
-- Source metric `nvidia_gpu_sm_util_percent` doesn't exist yet
-- No MIG devices currently allocated to jobs
+- Source metric `nvidia_gpu_graphics_util_percent` doesn't exist yet
+- No MIG devices currently allocated to jobs (or GPM not enabled)
 - Recording rule interval too long
 
 ### Issue: Metric exists but jobstats still shows errors
@@ -335,15 +351,15 @@ JOBID="167890"
 curl -s "$PROM_URL/api/v1/query?query=nvidia_gpu_duty_cycle{jobId==\"$JOBID\"}" | jq .
 ```
 
-### Issue: Both duty_cycle and sm_util_percent exist for MIG
+### Issue: Both duty_cycle and graphics_util_percent exist for MIG
 
 This is **expected behavior** with recording rules - both metrics exist:
-- `nvidia_gpu_sm_util_percent{uuid="MIG-..."}` - Original from exporter
-- `nvidia_gpu_duty_cycle{uuid="MIG-..."}` - Created by recording rule
+- `nvidia_gpu_graphics_util_percent{uuid="MIG-..."}` - Original from exporter (0-1 range)
+- `nvidia_gpu_duty_cycle{uuid="MIG-..."}` - Created by recording rule (0-100 range)
 
-This is fine! Jobstats will use `duty_cycle` which now exists.
+This is fine! Jobstats will use `duty_cycle` which now exists with proper scaling.
 
-If you want only one metric, use **metric relabeling** instead.
+**Note:** Do NOT use metric relabeling to get only one metric, as it cannot perform the * 100 scaling needed.
 
 ## Testing Checklist
 
@@ -406,11 +422,14 @@ The created `nvidia_gpu_duty_cycle` metrics will stop being generated, but histo
 ## Summary
 
 The Prometheus recording rule approach:
-1. Creates `nvidia_gpu_duty_cycle` for MIG devices using `nvidia_gpu_sm_util_percent`
-2. Preserves all labels including `jobid`
-3. Requires no code changes to jobstats
-4. Works immediately once Prometheus is reloaded
-5. Can coexist with code-based fix (no conflicts)
+1. Creates `nvidia_gpu_duty_cycle` for MIG devices using `nvidia_gpu_graphics_util_percent * 100`
+2. Properly scales GPM metrics from 0-1 range to 0-100 range
+3. Preserves all labels including `jobid`
+4. Requires no code changes to jobstats
+5. Works immediately once Prometheus is reloaded
+6. Can coexist with code-based fix (no conflicts)
 
-Both approaches are valid and can be used together for maximum compatibility!
+**Recommendation:** Use Recording Rule (Approach 1) for MIG fixes, as metric relabeling cannot perform the necessary * 100 scaling.
+
+Both the Prometheus recording rule and the code-based fix can be used together for maximum compatibility!
 
