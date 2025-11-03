@@ -103,6 +103,10 @@ python3 fix_jobstats_alloc_cores.py
 
 ### fix_jobstats_mig_utilization_v3.py
 
+> **Two Options for MIG Fix:**
+> 1. **Python Script (this file)**: Patches the `jobstats.py` code directly (recommended for most users)
+> 2. **Prometheus-Side Fix**: Configure Prometheus recording rules instead (see [fix_jobstats_mig_utilization_alternate.md](fix_jobstats_mig_utilization_alternate.md))
+
 **Purpose**: Patches jobstats GPU utilization queries to support both regular GPUs and NVIDIA MIG (Multi-Instance GPU) instances with a three-tier metric fallback system.
 
 **The Problem**: 
@@ -208,7 +212,7 @@ GPU utilization  [|||||||||||||||||||||||||||||||||||||||||||||||94%]
 - **Works with hybrid clusters**: MIG and non-MIG nodes coexist seamlessly
 
 **Alternative Prometheus-Side Solution**:
-If you prefer not to modify jobstats code, see [alternate_mig_fix.md](alternate_mig_fix.md) for Prometheus recording rule approach.
+If you prefer not to modify jobstats code, see [fix_jobstats_mig_utilization_alternate.md](fix_jobstats_mig_utilization_alternate.md) for Prometheus recording rule approach. This allows fixing the issue entirely in Prometheus configuration without any code changes.
 
 ## Workload Testing
 

@@ -11,7 +11,7 @@ Jobstats is a comprehensive job monitoring platform designed for CPU and GPU clu
 - Web-based dashboards via Grafana
 - Command-line tools for job analysis
 
-**MIG Support**: This deployment includes a fix for NVIDIA Multi-Instance GPU (MIG) technology that provides proper GPU utilization metrics for MIG instances. For details on the MIG fix tool, see [Tools Documentation](automation/tools/README.md#fix_jobstats_mig_utilization_v3py). For comprehensive MIG deployment guidance, see [MIG Support Guide](automation/MIG_SUPPORT.md).
+**MIG Support**: This deployment includes a fix for NVIDIA Multi-Instance GPU (MIG) technology that provides proper GPU utilization metrics for MIG instances. See [MIG Fix Documentation](automation/tools/README.md#fix_jobstats_mig_utilization_v3py) for details on both code-based and Prometheus-based fix options.
 
 ## Quickstart
 

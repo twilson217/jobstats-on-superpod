@@ -268,7 +268,7 @@ This deployment includes comprehensive support for NVIDIA Multi-Instance GPU (MI
 - Fix script available: `automation/tools/fix_jobstats_mig_utilization.py`
 
 **Comprehensive Documentation:**
-- Full MIG support guide: [MIG_SUPPORT.md](MIG_SUPPORT.md)
+- MIG fix options (code-based & Prometheus): [tools/README.md](tools/README.md#fix_jobstats_mig_utilization_v3py)
 - Troubleshooting for MIG-specific issues
 - Architecture-specific behavior documentation
 
@@ -284,7 +284,7 @@ python3 automation/tools/fix_jobstats_mig_utilization.py
 pdsh -w dgx[001-100] "ls -la /cm/local/apps/slurm/var/prologs/60-prolog-jobstats.sh"
 ```
 
-See [MIG_SUPPORT.md](MIG_SUPPORT.md) for complete details, troubleshooting, and verification steps.
+See [tools/README.md](tools/README.md#fix_jobstats_mig_utilization_v3py) for complete details on MIG fix options, usage, and troubleshooting.
 
 ## Additional Automation Tools
 

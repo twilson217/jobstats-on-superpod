@@ -413,9 +413,9 @@ The created `nvidia_gpu_duty_cycle` metrics will stop being generated, but histo
 
 ## Related Documentation
 
-- [Main MIG Support Guide](../MIG_SUPPORT.md)
-- [Code-based Fix](fix_jobstats_mig_utilization.py)
-- [Custom Scripts](../scripts/README.md)
+- [Code-based Fix (Python Script)](fix_jobstats_mig_utilization_v3.py)
+- [Tools Documentation](README.md)
+- [Custom Prolog/Epilog Scripts](../scripts/README.md)
 - [Prometheus Recording Rules Documentation](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/)
 - [Prometheus Relabeling Documentation](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config)
 
