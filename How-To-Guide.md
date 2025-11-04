@@ -317,6 +317,15 @@ netstat -tlnp | grep :9445 || ss -tlnp | grep :9445
 
 ### 3b. GPU Job Ownership Helper (prolog/epilog scripts)
 
+#### MIG Support Overview
+
+Multi-Instance GPU (MIG) allows a single GPU to be partitioned into multiple independent instances, each with dedicated resources. The standard jobstats prolog/epilog scripts were designed for traditional GPU allocations and need enhancements to properly track MIG instances.
+
+**Key MIG Improvements:**
+- **MIG UUID Detection**: Scripts now detect both standard GPU UUIDs and MIG instance UUIDs (format: `MIG-<uuid>`)
+- **Proper Environment Variables**: Sets `SLURM_JOB_GPUS` correctly for MIG instances
+- **Compatibility**: Works seamlessly with both MIG-enabled and standard GPU configurations
+
 #### BCM Script Discovery System
 
 BCM uses a generic prolog/epilog system that automatically calls all scripts
@@ -340,27 +349,37 @@ mkdir -p /opt/jobstats-deployment
 
 cd /opt/jobstats-deployment && git clone https://github.com/PrincetonUniversity/jobstats.git
 
+# Step 3 - Clone or update jobstats-on-superpod repository (for MIG-optimized scripts)
+
+cd /opt/jobstats-deployment && git clone https://github.com/twilson217/jobstats-on-superpod.git
+
+# Step 4 - Switch to mig-enhancements branch
+
+cd /opt/jobstats-deployment/jobstats-on-superpod && git checkout mig-enhancements
+
 ```
 
 ---
 
 ### Commands for BCM Script Installation
 
+**Note:** These scripts have been enhanced to support MIG (Multi-Instance GPU) configurations. The MIG-optimized prolog and epilog scripts properly detect and track GPU allocations for both standard GPUs and MIG instances.
+
 #### Host: slurmctl
 
 ```bash
 
-# Step 1 - Copy prolog script to shared storage
+# Step 1 - Copy MIG-optimized prolog script to shared storage
 
-cp /opt/jobstats-deployment/jobstats/slurm/prolog.d/gpustats_helper.sh /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh
+cp /opt/jobstats-deployment/jobstats-on-superpod/automation/scripts/prolog-jobstats.sh /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh
 
 # Step 2 - Make prolog script executable
 
 chmod +x /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh
 
-# Step 3 - Copy epilog script to shared storage
+# Step 3 - Copy MIG-optimized epilog script to shared storage
 
-cp /opt/jobstats-deployment/jobstats/slurm/epilog.d/gpustats_helper.sh /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh
+cp /opt/jobstats-deployment/jobstats-on-superpod/automation/scripts/epilog-jobstats.sh /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh
 
 # Step 4 - Make epilog script executable
 
@@ -573,10 +592,16 @@ cmsh -c "wlm;use slurm;set epilogslurmctld /usr/local/sbin/slurmctldepilog.sh;co
 This section sets up the Prometheus server
 to collect and store metrics from all exporters.
 
+**MIG Support:** This deployment includes a recording rule that creates
+`nvidia_gpu_duty_cycle` metrics for MIG instances using their
+`nvidia_gpu_graphics_util_percent` metric (scaled by 100), ensuring
+jobstats works out-of-the-box with MIG-enabled GPUs.
+
 ### What we'll do
 
 - Download and install Prometheus
 - Create Prometheus configuration
+- Create MIG compatibility recording rule for GPU metrics
 - Create systemd service for Prometheus
 - Start and enable Prometheus service
 
@@ -615,6 +640,46 @@ chown prometheus:prometheus /var/lib/prometheus
 
 ---
 
+#### MIG Recording Rule Explanation
+
+The Prometheus recording rule creates a synthetic `nvidia_gpu_duty_cycle` metric for MIG instances:
+
+- **Why needed**: MIG instances don't expose the traditional `nvidia_gpu_duty_cycle` metric
+- **Source metric**: Uses `nvidia_gpu_graphics_util_percent` from the GPU exporter
+- **Scaling**: Multiplies by 100 to convert from 0-1 range to 0-100 range (matching duty_cycle scale)
+- **Filtering**: Only applies to UUIDs starting with "MIG-" to avoid affecting standard GPUs
+- **Result**: Jobstats can query GPU utilization for MIG instances using the same metric name
+
+#### Host: prometheus
+
+```bash
+# Step 1 - Create Prometheus rules directory
+
+mkdir -p /etc/prometheus/rules
+
+# Step 2 - Create MIG compatibility recording rule
+
+cat > /etc/prometheus/rules/jobstats_mig_compat.yml << 'EOF'
+groups:
+  - name: jobstats_mig_compatibility
+    interval: 30s
+    rules:
+      # Create duty_cycle metric for MIG instances using graphics_util_percent * 100
+      # Note: GPM metrics are stored in 0-1 range, multiply by 100 to match duty_cycle scale (0-100)
+      - record: nvidia_gpu_duty_cycle
+        expr: nvidia_gpu_graphics_util_percent{uuid=~"MIG-.*"} * 100
+        labels:
+          source: "mig_compat_rule"
+EOF
+
+# Step 3 - Set ownership of rules directory
+
+chown -R prometheus:prometheus /etc/prometheus/rules
+
+```
+
+---
+
 
 ### Prometheus Configuration
 
@@ -626,6 +691,10 @@ global:
   evaluation_interval: 30s
   external_labels:
     monitor: 'jobstats-slurm'
+
+# Load recording rules (includes MIG compatibility fix)
+rule_files:
+  - /etc/prometheus/rules/*.yml
 
 scrape_configs:
   - job_name: 'prometheus'

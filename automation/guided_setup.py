@@ -904,6 +904,16 @@ rm /tmp/nvidia_gpu_exporter.service''',
                 'host': slurm_controller,
                 'command': 'cd /opt/jobstats-deployment && if [ -d jobstats ]; then cd jobstats && git pull; else git clone https://github.com/PrincetonUniversity/jobstats.git; fi',
                 'description': 'Clone or update jobstats repository'
+            },
+            {
+                'host': slurm_controller,
+                'command': 'cd /opt/jobstats-deployment && if [ -d jobstats-on-superpod ]; then cd jobstats-on-superpod && git pull; else git clone https://github.com/twilson217/jobstats-on-superpod.git; fi',
+                'description': 'Clone or update jobstats-on-superpod repository (for custom scripts)'
+            },
+            {
+                'host': slurm_controller,
+                'command': 'cd /opt/jobstats-deployment/jobstats-on-superpod && git checkout mig-enhancements',
+                'description': 'Switch to mig-enhancements branch'
             }
         ]
         
@@ -922,7 +932,7 @@ rm /tmp/nvidia_gpu_exporter.service''',
             },
             {
                 'host': slurm_controller,
-                'command': 'cp /opt/jobstats-deployment/automation/scripts/prolog-jobstats.sh /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh',
+                'command': 'cp /opt/jobstats-deployment/jobstats-on-superpod/automation/scripts/prolog-jobstats.sh /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh',
                 'description': 'Copy MIG-optimized prolog script to shared storage'
             },
             {
@@ -932,7 +942,7 @@ rm /tmp/nvidia_gpu_exporter.service''',
             },
             {
                 'host': slurm_controller,
-                'command': 'cp /opt/jobstats-deployment/automation/scripts/epilog-jobstats.sh /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh',
+                'command': 'cp /opt/jobstats-deployment/jobstats-on-superpod/automation/scripts/epilog-jobstats.sh /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh',
                 'description': 'Copy MIG-optimized epilog script to shared storage'
             },
             {
@@ -1260,20 +1270,28 @@ EOF''',
         self._add_to_document("This section sets up the Prometheus server")
         self._add_to_document("to collect and store metrics from all exporters.")
         self._add_to_document("")
+        self._add_to_document("**MIG Support:** This deployment includes a recording rule that creates")
+        self._add_to_document("`nvidia_gpu_duty_cycle` metrics for MIG instances using their")
+        self._add_to_document("`nvidia_gpu_graphics_util_percent` metric (scaled by 100), ensuring")
+        self._add_to_document("jobstats works out-of-the-box with MIG-enabled GPUs.")
+        self._add_to_document("")
         self._add_to_document("### What we'll do")
         self._add_to_document("")
         self._add_to_document("- Download and install Prometheus")
         self._add_to_document("- Create Prometheus configuration")
+        self._add_to_document("- Create MIG compatibility recording rule for GPU metrics")
         self._add_to_document("- Create systemd service for Prometheus")
         self._add_to_document("- Start and enable Prometheus service")
         self._add_to_document("")
         
         print(f"{Colors.BLUE}This section sets up the Prometheus time series database{Colors.END}")
         print(f"{Colors.BLUE}to collect and store metrics from all exporters.{Colors.END}")
+        print(f"{Colors.BLUE}Includes MIG GPU support via recording rules.{Colors.END}")
         
         print(f"\n{Colors.BOLD}{Colors.WHITE}What we'll do:{Colors.END}")
         print(f"• Download and install Prometheus")
         print(f"• Create Prometheus configuration")
+        print(f"• Create MIG compatibility recording rule for GPU metrics")
         print(f"• Setup systemd service")
         print(f"• Start Prometheus server")
         
@@ -1398,6 +1416,10 @@ rm /tmp/prometheus.service''',
   external_labels:
     monitor: 'jobstats-{self.config['cluster_name']}'
 
+# Load recording rules (includes MIG compatibility fix)
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
@@ -1443,8 +1465,33 @@ scrape_configs:
             print(f"{Colors.GREEN}✓ Prometheus configuration created{Colors.END}")
             return True
         
-        # Create config file directly on remote server
+        # Create MIG recording rule (for MIG GPU utilization support)
+        mig_recording_rule = """groups:
+  - name: jobstats_mig_compatibility
+    interval: 30s
+    rules:
+      # Create duty_cycle metric for MIG instances using graphics_util_percent * 100
+      # Note: GPM metrics are stored in 0-1 range, multiply by 100 to match duty_cycle scale (0-100)
+      - record: nvidia_gpu_duty_cycle
+        expr: nvidia_gpu_graphics_util_percent{uuid=~"MIG-.*"} * 100
+        labels:
+          source: "mig_compat_rule"
+"""
+        
+        # Create config file and recording rules directly on remote server
         config_commands = [
+            {
+                'host': self.config['prometheus_server'],
+                'command': 'mkdir -p /etc/prometheus/rules',
+                'description': 'Create Prometheus rules directory'
+            },
+            {
+                'host': self.config['prometheus_server'],
+                'command': f'''cat > /etc/prometheus/rules/jobstats_mig_compat.yml << 'EOF'
+{mig_recording_rule}
+EOF''',
+                'description': 'Install MIG compatibility recording rule'
+            },
             {
                 'host': self.config['prometheus_server'],
                 'command': f'''cat > /etc/prometheus/prometheus.yml << 'EOF'
