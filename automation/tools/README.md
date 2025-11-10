@@ -76,12 +76,14 @@ python3 fix_jobstats_timelimit.py
 
 ### fix_jobstats_alloc_cores.py
 
-**Purpose**: Fix for jobstats alloc/cores division error where alloc is a string but cores is an integer.
+**Purpose**: Fix for jobstats division errors where variables (alloc, used) are divided by cores and may be None, strings, or cause division by zero.
 
 **Use Case**:
-- Fix TypeError in output_formatters.py where alloc/cores division fails
-- Handle string vs integer type mismatches
-- Resolve division errors in memory allocation calculations
+- Fix TypeError in output_formatters.py where division operations fail
+- Handle string vs integer type mismatches (alloc as string, cores as int)
+- Handle None values in division operations
+- Resolve division by zero errors
+- Fix multiple division patterns: `alloc / cores`, `used/cores`, etc.
 
 **Usage**:
 ```bash
@@ -90,16 +92,63 @@ python3 fix_jobstats_alloc_cores.py
 
 # The script will:
 # - Create a backup of the original file
-# - Apply fixes to handle string alloc values
+# - Find and fix ALL division patterns that could fail
+# - Apply fixes with proper indentation detection
+# - Report number of fixes applied
 # - Test the fix with a recent job
-# - Provide detailed error handling and recovery
 ```
 
 **Features**:
+- Handles multiple division patterns (alloc/cores, used/cores)
+- Fixes ALL occurrences, not just the first one
 - Comprehensive error handling (ValueError, TypeError, ZeroDivisionError)
-- Pattern matching fallback if exact line not found
+- Automatic indentation detection and preservation
 - Built-in testing functionality
 - Automatic backup creation with rollback capability
+
+### fix_jobstats_alloc_none.py
+
+**Purpose**: Fix for jobstats NoneType errors when None values are passed to human_bytes() method.
+
+**Use Case**:
+- Fix TypeError: float() argument must be a string or a real number, not 'NoneType'
+- Handle cases where allocation, usage, or other data is missing or None
+- Prevent crashes when job metrics are unavailable
+
+**Error Pattern**:
+```python
+# Error can occur in multiple places:
+hb_alloc = self.human_bytes(alloc).replace(".0GB", "GB")
+report += f"{node}: {self.human_bytes(used)}/{hb_alloc}"
+# When alloc or used is None, human_bytes() fails at:
+size = float(size)  # TypeError: float() argument must be a string or a real number, not 'NoneType'
+```
+
+**Solution**:
+Fixes the `human_bytes()` method itself to gracefully handle None and invalid values, returning "Unknown" instead of crashing. This fixes all call sites at once.
+
+**Usage**:
+```bash
+# Run the fix (must be run on login node where jobstats is installed)
+python3 fix_jobstats_alloc_none.py
+
+# Test with a specific job ID that causes the error
+python3 fix_jobstats_alloc_none.py 167249
+
+# The script will:
+# - Create a timestamped backup of the original file
+# - Apply fixes to handle None alloc values
+# - Test the fix with a recent job or specified job ID
+# - Display "Unknown" when allocation data is unavailable
+```
+
+**Features**:
+- None value detection before conversion
+- Comprehensive error handling (ValueError, TypeError)
+- Pattern matching fallback if exact line not found
+- Built-in testing with optional job ID parameter
+- Automatic backup creation with timestamp
+- Graceful fallback to "Unknown" display
 
 ### fix_jobstats_mig_utilization_v3.py
 
