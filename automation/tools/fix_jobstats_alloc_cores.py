@@ -32,34 +32,96 @@ def fix_jobstats_alloc_cores():
     with open(jobstats_file, 'r') as f:
         content = f.read()
     
-    # Find and fix the problematic line
-    old_line = 'hb_alloc = self.human_bytes(alloc / cores).replace(".0GB", "GB")'
-    new_line = '''# Handle string alloc values
-        try:
-            alloc_value = float(alloc) if isinstance(alloc, str) else alloc
-            hb_alloc = self.human_bytes(alloc_value / cores).replace(".0GB", "GB")
-        except (ValueError, TypeError, ZeroDivisionError):
-            hb_alloc = "Unknown"'''
+    # Find and fix ALL problematic division lines
+    # Always use line-by-line approach to properly handle indentation
+    print("Searching for division lines that need None handling...")
     
-    if old_line in content:
-        content = content.replace(old_line, new_line)
-        print("Fixed alloc/cores division error")
-    else:
-        print("Warning: Could not find the exact line to fix")
-        print("Looking for similar patterns...")
+    lines = content.split('\n')
+    fixes_applied = 0
+    
+    # We need to iterate carefully since we're modifying the list
+    i = 0
+    while i < len(lines):
+        line = lines[i]
         
-        # Look for similar patterns
-        lines = content.split('\n')
+        # Look for patterns where variables are divided by cores and passed to human_bytes
+        # We need to detect patterns like: var/cores or var / cores
+        should_fix = False
+        var_name = None
+        division_pattern = None
+        
+        # Check if line has human_bytes and division by cores
+        if 'human_bytes' in line and ('/cores' in line or '/ cores' in line):
+            # Determine which variable is being divided
+            if 'alloc/cores' in line or 'alloc / cores' in line:
+                should_fix = True
+                var_name = 'alloc'
+                division_pattern = 'alloc/cores' if 'alloc/cores' in line else 'alloc / cores'
+            elif 'used/cores' in line or 'used / cores' in line:
+                should_fix = True
+                var_name = 'used'
+                division_pattern = 'used/cores' if 'used/cores' in line else 'used / cores'
+        
+        if should_fix and var_name and division_pattern:
+            print(f"Found line at {i+1} with {division_pattern}: {line.strip()}")
+            
+            # Detect the indentation of the original line
+            indent = len(line) - len(line.lstrip())
+            indent_str = ' ' * indent
+            
+            # Determine what variable to set based on the line content
+            result_var = 'result'  # default
+            if 'hb_alloc' in line:
+                result_var = 'hb_alloc'
+            elif 'report +=' in line:
+                result_var = None  # We'll skip the line for report
+            
+            # Build the replacement with proper indentation
+            new_lines = [
+                f"{indent_str}# Handle {var_name}/{('cores' if 'cores' in division_pattern else 'divisor')} with None values",
+                f"{indent_str}try:",
+            ]
+            
+            # For string conversion if needed
+            if var_name == 'alloc':
+                new_lines.append(f"{indent_str}    {var_name}_value = float({var_name}) if isinstance({var_name}, str) else {var_name}")
+                new_lines.append(f"{indent_str}    {line.strip()}")
+            else:
+                new_lines.append(f"{indent_str}    {line.strip()}")
+            
+            new_lines.append(f"{indent_str}except (ValueError, TypeError, ZeroDivisionError):")
+            
+            # Determine the fallback behavior
+            if result_var:
+                new_lines.append(f"{indent_str}    {result_var} = \"Unknown\"")
+            else:
+                new_lines.append(f"{indent_str}    pass  # Skip this line when data unavailable")
+            
+            # Use list splicing to replace the single line with multiple lines
+            lines[i:i+1] = new_lines
+            print(f"Applied fix for {division_pattern} with proper indentation")
+            fixes_applied += 1
+            
+            # Skip ahead past the lines we just inserted
+            i += len(new_lines)
+            continue
+        
+        i += 1
+    
+    if fixes_applied == 0:
+        print("Error: Could not find any target lines to fix")
+        print("\nDEBUG: Looking for any lines with division patterns...")
         for i, line in enumerate(lines):
-            if 'alloc / cores' in line and 'human_bytes' in line:
-                print(f"Found similar line at {i+1}: {line.strip()}")
-                lines[i] = new_line
-                content = '\n'.join(lines)
-                print("Applied fix to similar pattern")
-                break
-        else:
-            print("No similar patterns found")
-            return False
+            if '/ cores' in line or '/cores' in line:
+                has_hb = 'human_bytes' in line
+                has_alloc = 'alloc' in line.lower()
+                has_used = 'used' in line.lower()
+                print(f"  Line {i+1}: {line.strip()}")
+                print(f"    - has human_bytes: {has_hb}, has alloc: {has_alloc}, has used: {has_used}")
+        return False
+    
+    print(f"\nTotal fixes applied: {fixes_applied}")
+    content = '\n'.join(lines)
     
     # Write the fixed content
     with open(jobstats_file, 'w') as f:
