@@ -11,7 +11,52 @@ Jobstats is a comprehensive job monitoring platform designed for CPU and GPU clu
 - Web-based dashboards via Grafana
 - Command-line tools for job analysis
 
-**MIG Support**: This deployment includes a fix for NVIDIA Multi-Instance GPU (MIG) technology that provides proper GPU utilization metrics for MIG instances. See [MIG Fix Documentation](automation/tools/README.md#fix_jobstats_mig_utilization_v3py) for details on both code-based and Prometheus-based fix options.
+**MIG Support**: This deployment includes a fix for NVIDIA Multi-Instance GPU (MIG) technology that provides proper GPU utilization metrics for MIG instances. 
+
+### MIG GPU Utilization Metrics - Hardware Requirements
+
+GPU utilization metrics for MIG instances can be supported in Jobstats using the `nvidia_gpu_graphics_util_percent` metric from NVIDIA's GPU Performance Monitoring (GPM). **This support is hardware architecture dependent.**
+
+**Validated Configurations:**
+- ✅ **DGX B200 (Blackwell architecture)** with driver 580.x - **WORKING**
+  - `nvidia_gpu_graphics_util_percent` metric available
+  - Alternative MIG Fix (Prometheus recording rules) supported
+
+**Tested Configurations:**
+- ❌ **DGX A100 (Ampere architecture)** with drivers 570.x and 580.x - **NOT WORKING**
+  - No GPU utilization metrics available for MIG instances
+  - nvidia-smi reports `[N/A]` for `utilization.gpu`
+  - Neither `nvidia_gpu_duty_cycle` nor `nvidia_gpu_graphics_util_percent` available
+  - This appears to be a hardware architecture limitation
+
+**Untested Configurations:**
+- ❓ **H100/H200 (Hopper architecture)** - Testing not yet performed
+  - GPM support expected on Hopper+ architecture
+  - Likely to work similar to B200
+
+**Checking Metric Availability:**
+
+To verify if your GPU hardware supports the required utilization metrics, run this test on a compute node with a running GPU job:
+
+```bash
+# Submit a test job first (if not already running)
+srun --gpus=1 --time=5:00 sleep 300 &
+
+# Wait for metrics to be scraped (30-60 seconds)
+sleep 60
+
+# Check if utilization metrics are available
+curl -s http://localhost:9445/metrics | grep 'nvidia_gpu' | \
+  grep -E '(duty_cycle|util_percent)' | cut -d'{' -f1 | sort -u
+```
+
+**Expected Results:**
+- If you see `nvidia_gpu_graphics_util_percent` → MIG Fix will (Blackwell)
+- If you see `nvidia_gpu_duty_cycle` → Standard metrics work, no MIG fix needed
+- If no output → GPU utilization not available on this hardware/driver combination (like A100)
+
+For A100 users, consider monitoring alternative metrics:
+- `nvidia_gpu_power_usage_milliwatts` - Power draw as utilization proxy
 
 ## Quickstart
 
