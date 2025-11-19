@@ -649,7 +649,7 @@ python3 /tmp/update_slurm_conf.py''',
                 },
                 {
                     'host': dgx_node,
-                    'command': 'useradd --no-create-home --shell /bin/false prometheus || true',
+                    'command': 'useradd --system --no-create-home --shell /bin/false prometheus || true',
                     'description': f'Create prometheus user on {dgx_node}'
                 },
                 {
@@ -1089,7 +1089,7 @@ rm /tmp/nvidia_gpu_exporter.service''',
                 },
                 {
                     'host': dgx_node,
-                    'command': 'useradd --no-create-home --shell /bin/false prometheus || true',
+                    'command': 'useradd --system --no-create-home --shell /bin/false prometheus || true',
                     'description': f'Create prometheus user on {dgx_node}'
                 },
                 {
@@ -1324,7 +1324,7 @@ EOF''',
             },
             {
                 'host': self.config['prometheus_server'],
-                'command': 'useradd --no-create-home --shell /bin/false prometheus || true',
+                'command': 'useradd --system --no-create-home --shell /bin/false prometheus || true',
                 'description': 'Create prometheus user'
             },
             {
