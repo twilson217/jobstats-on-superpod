@@ -1190,8 +1190,8 @@ EOF''',
         # Get slurm controller from config
         slurm_controller = self.config['systems']['slurm_controller'][0]
         
-        # Step 1: Clone jobstats repository
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 1: Cloning jobstats repository{Colors.END}")
+        # Step 1: Clone jobstats-on-superpod repository for custom slurmctld epilog
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 1: Cloning jobstats-on-superpod repository{Colors.END}")
         
         clone_commands = [
             {
@@ -1201,23 +1201,28 @@ EOF''',
             },
             {
                 'host': slurm_controller,
-                'command': 'cd /opt/jobstats-deployment && if [ -d jobstats ]; then cd jobstats && git pull; else git clone https://github.com/PrincetonUniversity/jobstats.git; fi',
-                'description': 'Clone or update jobstats repository'
+                'command': 'cd /opt/jobstats-deployment && if [ -d jobstats-on-superpod ]; then cd jobstats-on-superpod && git pull; else git clone https://github.com/twilson217/jobstats-on-superpod.git; fi',
+                'description': 'Clone or update jobstats-on-superpod repository (for custom slurmctld epilog)'
+            },
+            {
+                'host': slurm_controller,
+                'command': 'cd /opt/jobstats-deployment/jobstats-on-superpod && git checkout mig-enhancements',
+                'description': 'Switch to mig-enhancements branch'
             }
         ]
         
         if not self._execute_commands(clone_commands, "Repository Cloning"):
-            print(f"\n{Colors.RED}✗ Failed to clone jobstats repository{Colors.END}")
+            print(f"\n{Colors.RED}✗ Failed to clone jobstats-on-superpod repository{Colors.END}")
             return False
         
-        # Step 2: Install slurmctld epilog script
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 2: Installing slurmctld epilog script{Colors.END}")
+        # Step 2: Install BCM-optimized slurmctld epilog script
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 2: Installing BCM-optimized slurmctld epilog script{Colors.END}")
         
         install_commands = [
             {
                 'host': slurm_controller,
-                'command': 'cp /opt/jobstats-deployment/jobstats/slurm/slurmctldepilog.sh /usr/local/sbin/',
-                'description': 'Copy slurmctld epilog script for job summaries'
+                'command': 'cp /opt/jobstats-deployment/jobstats-on-superpod/automation/scripts/slurmctldepilog-jobstats.sh /usr/local/sbin/slurmctldepilog.sh',
+                'description': 'Copy BCM-optimized slurmctld epilog script'
             },
             {
                 'host': slurm_controller,

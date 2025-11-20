@@ -38,6 +38,31 @@ Our custom scripts add MIG support while maintaining full backward compatibility
 - Handles both MIG and regular GPU device identifiers
 - Removes all tracking files for the job
 
+### slurmctldepilog-jobstats.sh
+
+**Purpose:** Generates job summaries and stores them in the Slurm database when jobs complete.
+
+**Runs On:** Slurm controller node (triggered by slurmctld daemon)
+
+**Deployed To:** `/usr/local/sbin/slurmctldepilog.sh` (via guided setup)
+
+**Configured In:** BCM cmsh setting `epilogslurmctld`
+
+**Key Features:**
+- Runs `jobstats` command to generate job summary
+- Stores summary in Slurm database `AdminComment` field
+- Handles job arrays correctly
+- **BCM-specific:** Adds Slurm commands to PATH (required for BCM environments)
+
+**BCM Modification:**
+The upstream script from Princeton assumes Slurm commands are in the PATH, but in BCM environments the slurm module must be loaded. Our version adds:
+```bash
+# Add Slurm commands to PATH (required for BCM environments)
+export PATH="/cm/shared/apps/slurm/current/bin:$PATH"
+```
+
+This allows both `jobstats` and `sacctmgr` commands to work without requiring module loading.
+
 ## Differences from Upstream
 
 ### Upstream (jobstats/slurm/prolog.d/gpustats_helper.sh)
@@ -114,7 +139,9 @@ uv run python automation/guided_setup.py --config automation/configs/config.json
 The script will:
 1. Copy `automation/scripts/prolog-jobstats.sh` → `/cm/shared/apps/slurm/var/cm/prolog-jobstats.sh`
 2. Copy `automation/scripts/epilog-jobstats.sh` → `/cm/shared/apps/slurm/var/cm/epilog-jobstats.sh`
-3. Create symlinks on all GPU nodes
+3. Copy `automation/scripts/slurmctldepilog-jobstats.sh` → `/usr/local/sbin/slurmctldepilog.sh` (on Slurm controller)
+4. Create symlinks on all GPU nodes
+5. Configure BCM `epilogslurmctld` setting
 
 ### Manual Deployment
 
@@ -125,6 +152,13 @@ If you need to deploy manually:
 cp automation/scripts/prolog-jobstats.sh /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh
 cp automation/scripts/epilog-jobstats.sh /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh
 chmod +x /cm/shared/apps/slurm/var/cm/*-jobstats.sh
+
+# Deploy slurmctld epilog on Slurm controller
+cp automation/scripts/slurmctldepilog-jobstats.sh /usr/local/sbin/slurmctldepilog.sh
+chmod +x /usr/local/sbin/slurmctldepilog.sh
+
+# Configure BCM to use the slurmctld epilog
+cmsh -c "wlm;use slurm;set epilogslurmctld /usr/local/sbin/slurmctldepilog.sh;commit"
 
 # On each GPU node (or via pdsh)
 mkdir -p /cm/local/apps/slurm/var/prologs /cm/local/apps/slurm/var/epilogs
@@ -223,6 +257,7 @@ systemctl restart nvidia_gpu_exporter
 
 - **v1.0** (2025-10-28): Initial upstream scripts
 - **v1.1** (2025-11-01): Added MIG support with UUID detection and error handling
+- **v1.2** (2025-11-20): Added BCM-optimized slurmctld epilog with PATH fix for Slurm commands
 
 ## Related Documentation
 
