@@ -4,14 +4,18 @@
 # It generates job summaries and stores them in the Slurm database
 #
 # BCM Modifications:
-# - Added PATH update to include Slurm commands (required for BCM environments)
+# - Added module loading to set up Slurm environment (required for BCM environments)
 # 
-# Version: 1.1 (BCM Support)
+# Version: 1.2 (BCM Support - Module Loading)
 # Date: 2025-11-20
 # Based on: PrincetonUniversity/jobstats slurm/slurmctldepilog.sh
 
-# Add Slurm commands to PATH (required for BCM environments where slurm module isn't loaded)
-export PATH="/cm/shared/apps/slurm/current/bin:$PATH"
+# Load Slurm module (required for BCM environments)
+# This sets up PATH, SLURM_CONF, and other environment variables
+if [ -f /etc/profile.d/modules.sh ]; then
+    source /etc/profile.d/modules.sh
+    module load slurm 2>/dev/null
+fi
 
 # it looks like that this is sometimes too fast, wait a tiny bit to let slurmdbd get the data it needs
 sleep 5s
