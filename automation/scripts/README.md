@@ -55,13 +55,17 @@ Our custom scripts add MIG support while maintaining full backward compatibility
 - **BCM-specific:** Adds Slurm commands to PATH (required for BCM environments)
 
 **BCM Modification:**
-The upstream script from Princeton assumes Slurm commands are in the PATH, but in BCM environments the slurm module must be loaded. Our version adds:
+The upstream script from Princeton assumes Slurm commands and environment are available, but in BCM environments the slurm module must be loaded. Our version adds:
 ```bash
-# Add Slurm commands to PATH (required for BCM environments)
-export PATH="/cm/shared/apps/slurm/current/bin:$PATH"
+# Load Slurm module (required for BCM environments)
+# This sets up PATH, SLURM_CONF, and other environment variables
+if [ -f /etc/profile.d/modules.sh ]; then
+    source /etc/profile.d/modules.sh
+    module load slurm 2>/dev/null
+fi
 ```
 
-This allows both `jobstats` and `sacctmgr` commands to work without requiring module loading.
+This loads the slurm module which sets up `PATH`, `SLURM_CONF`, and other environment variables needed by `jobstats` and `sacctmgr` commands.
 
 ## Differences from Upstream
 
